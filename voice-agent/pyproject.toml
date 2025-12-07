@@ -1,0 +1,20 @@
+[project]
+name = "gaming-coach"
+version = "0.1.0"
+description = "Push-to-talk voice assistant for gaming"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pynput>=1.7.6",
+    "sounddevice>=0.4.6",
+    "numpy>=1.26.0",
+    "soundfile>=0.12.1",
+    "mss>=9.0.1",
+    "pillow>=10.0.0",
+    "elevenlabs>=1.0.0",
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+gaming-coach = "main:main"
