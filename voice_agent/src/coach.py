@@ -188,7 +188,7 @@ class Coach:
         response = self._client.chat.completions.create(
             model=self._model,
             messages=messages,
-            max_tokens=300,  # Keep responses concise for speech
+            max_completion_tokens=300,  # Keep responses concise for speech
         )
 
         assistant_message = response.choices[0].message.content or ""
