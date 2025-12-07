@@ -12,7 +12,6 @@ from voice_agent.src.screenshot import ScreenCapture
 from voice_agent.src.stt import SpeechToText
 from voice_agent.src.tts import TextToSpeech
 from voice_agent.src.coach import Coach
-from voice_agent.src.overlay import TextOverlay
 
 
 class GamingCoach:
@@ -28,7 +27,6 @@ class GamingCoach:
         self._stt = SpeechToText()
         self._tts = TextToSpeech()
         self._coach = Coach()
-        self._overlay = TextOverlay()
 
         # State
         self._screenshot: bytes | None = None
@@ -83,20 +81,15 @@ class GamingCoach:
             print("  Speaking...", flush=True)
             audio_response = self._tts.synthesize(response)
             with logfire.span("play_audio", audio_size_bytes=len(audio_response)):
-                self._overlay.show(response)
                 self._player.play(audio_response)
-                self._overlay.hide()
 
         except Exception as e:
             logfire.exception("Voice interaction failed")
             print(f"\n  Error: {e}")
             # Try to speak a fallback message
             try:
-                fallback_text = "Sorry, I couldn't process that."
-                fallback = self._tts.synthesize(fallback_text)
-                self._overlay.show(fallback_text)
+                fallback = self._tts.synthesize("Sorry, I couldn't process that.")
                 self._player.play(fallback)
-                self._overlay.hide()
             except Exception:
                 logfire.error("Failed to speak fallback message")
                 print("  (Failed to speak fallback message)")
