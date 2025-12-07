@@ -20,6 +20,7 @@ dependencies = [
     "redis>=7.1.0",
     "langcache>=0.1.0",
     "logfire[redis]>=2.0.0",
+    "pyobjc-framework-Cocoa>=10.0",
 ]
 
 [project.scripts]
