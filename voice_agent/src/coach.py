@@ -1,11 +1,12 @@
 """Gaming Coach LLM using OpenAI with semantic caching."""
 
-import os
 import base64
 import logging
+import os
 
 from openai import OpenAI
 
+from .context import ContextProvider
 from .semantic_cache import SemanticCache
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ class Coach:
         system_prompt: str | None = None,
         max_history: int = 20,
         enable_cache: bool = True,
+        enable_context: bool = True,
     ):
         """
         Initialize the coach.
@@ -113,6 +115,7 @@ class Coach:
             system_prompt: Custom system prompt for the coach.
             max_history: Maximum number of messages to keep in history.
             enable_cache: Whether to enable semantic caching.
+            enable_context: Whether to fetch game state and NPC context from Redis.
         """
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self._api_key:
@@ -125,6 +128,9 @@ class Coach:
         self._max_history = max_history
         self._history: list[dict] = []
         self._cache = SemanticCache() if enable_cache else None
+        self._context = (
+            ContextProvider(openai_client=self._client) if enable_context else None
+        )
 
     def get_response(
         self,
@@ -156,6 +162,13 @@ class Coach:
                     self._history = self._history[-self._max_history :]
                 return cached_response
 
+        # Fetch context from Redis (game state + NPC search)
+        context_str = None
+        if self._context:
+            context_str = self._context.get_context_for_query(user_message)
+            if context_str:
+                logger.info("Fetched context from Redis for query")
+
         # Build the user message content
         if screenshot:
             # Vision-enabled request with image
@@ -180,8 +193,25 @@ class Coach:
         # Build messages with system prompt
         messages = [
             {"role": "system", "content": self._system_prompt},
-            *self._history,
         ]
+
+        # Inject context as a separate message before history if available
+        if context_str:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Here is the current game context:\n\n{context_str}",
+                }
+            )
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "Got it, I'll use this context to help answer your questions.",
+                }
+            )
+
+        # Add conversation history
+        messages.extend(self._history)
 
         # Get response from OpenAI
         response = self._client.chat.completions.create(
