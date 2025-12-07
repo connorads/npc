@@ -50,7 +50,9 @@ class SemanticCache:
             self._enabled = True
             logger.info("Semantic cache enabled with LangCache")
         except ImportError:
-            logger.warning("langcache package not installed. Semantic caching disabled.")
+            logger.warning(
+                "langcache package not installed. Semantic caching disabled."
+            )
         except Exception as e:
             logger.warning(f"Failed to initialize LangCache: {e}")
 
@@ -59,7 +61,7 @@ class SemanticCache:
         """Check if semantic caching is enabled."""
         return self._enabled
 
-    def search(self, prompt: str) -> Optional[str]:
+    def search(self, prompt: str) -> str | None:
         """
         Search for a cached response.
 
