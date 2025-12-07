@@ -8,29 +8,25 @@ from pydantic import BaseModel, Field
 class GameEvent(str, Enum):
     """Major game events detectable from screen."""
     NONE = "none"
-    PLAYER_DIED = "player_died"           # "YOU DIED" screen
-    BOSS_DEFEATED = "boss_defeated"       # "GREAT ENEMY FELLED" / "LEGEND FELLED"
-    GRACE_DISCOVERED = "grace_discovered" # "Site of Grace Discovered"
+    PARTY_DEFEATED = "party_defeated"       # Party defeated/death screen
+    BOSS_DEFEATED = "boss_defeated"         # Boss/enemy defeated notification
+    FLAG_DISCOVERED = "flag_discovered"     # "Expedition Flag Discovered"
 
 
 class ScreenType(str, Enum):
     """Type of screen currently displayed."""
     GAMEPLAY = "gameplay"
+    COMBAT = "combat"
     INVENTORY = "inventory"
     EQUIPMENT = "equipment"
     MAP = "map"
     STATUS = "status"
-    GRACE_MENU = "grace_menu"
+    CAMP_MENU = "camp_menu"
+    FLAG_MENU = "flag_menu"
     LOADING = "loading"
     DEATH_SCREEN = "death_screen"
     CUTSCENE = "cutscene"
-
-
-class TimeOfDay(str, Enum):
-    """In-game time of day."""
-    DAY = "day"
-    NIGHT = "night"
-    UNKNOWN = "unknown"
+    DIALOGUE = "dialogue"
 
 
 class UpdateType(str, Enum):
@@ -40,7 +36,8 @@ class UpdateType(str, Enum):
     INVENTORY = "inventory"
     BOSS_ENCOUNTER = "boss_encounter"
     GAME_EVENT = "game_event"
-    GRACE_REST = "grace_rest"
+    FLAG_REST = "flag_rest"
+    CAMP_REST = "camp_rest"
     STATS = "stats"
     MULTIPLE = "multiple"
 
@@ -51,17 +48,36 @@ class InventoryItem(BaseModel):
     quantity: int = Field(default=1, description="Quantity of the item")
 
 
+class Picto(BaseModel):
+    """A Picto (equipable perk) in the game."""
+    name: str = Field(description="Name of the Picto")
+    character: Optional[str] = Field(default=None, description="Character the Picto is equipped to")
+    mastered: bool = Field(default=False, description="Whether the Picto has been mastered")
+
+
 class BossState(BaseModel):
-    """Boss encounter information."""
-    name: str = Field(description="Boss name from health bar")
+    """Boss/enemy encounter information."""
+    name: str = Field(description="Boss/enemy name from health bar")
     hp_percentage: float = Field(description="Estimated HP remaining (0-100)")
+    is_axon: bool = Field(default=False, description="Whether this is an Axon (ancient powerful being)")
 
 
-class PlayerStats(BaseModel):
-    """Player stats visible in HUD or menus."""
+class CharacterStats(BaseModel):
+    """Stats for a party member."""
+    name: str = Field(description="Character name (Gustave, Maelle, Lune, Sciel, Verso, Monoco)")
     hp_percentage: Optional[float] = Field(default=None, description="Estimated HP (0-100)")
-    runes: Optional[int] = Field(default=None, description="Current rune count")
-    rune_level: Optional[int] = Field(default=None, description="Character level if visible")
+    level: Optional[int] = Field(default=None, description="Character level if visible")
+    vitality: Optional[int] = Field(default=None, description="Vitality stat (max health)")
+    might: Optional[int] = Field(default=None, description="Might stat (attack power)")
+    agility: Optional[int] = Field(default=None, description="Agility stat (attack frequency)")
+    defense: Optional[int] = Field(default=None, description="Defense stat (damage reduction)")
+    luck: Optional[int] = Field(default=None, description="Luck stat (critical rate)")
+
+
+class PartyStats(BaseModel):
+    """Party-wide stats visible in HUD or menus."""
+    active_characters: Optional[list[str]] = Field(default=None, description="Characters currently in the active party")
+    gradient_gauge: Optional[float] = Field(default=None, description="Gradient gauge percentage (0-100) for powerful attacks")
 
 
 class StateUpdate(BaseModel):
@@ -75,35 +91,43 @@ class StateUpdate(BaseModel):
     )
     screen_type: ScreenType = Field(
         default=ScreenType.GAMEPLAY,
-        description="Type of screen currently displayed (gameplay, inventory, map, etc.)"
+        description="Type of screen currently displayed (gameplay, combat, inventory, map, etc.)"
     )
     new_location: Optional[str] = Field(
         default=None,
-        description="The player's current location/area name if visible (e.g., 'Limgrave', 'Stormveil Castle', 'Roundtable Hold'). Set when update_type is 'location' or 'multiple'."
+        description="The player's current location/area name if visible (e.g., 'Lumière', 'The Continent', 'Old Lumière', 'Renoir's Mansion'). Set when update_type is 'location' or 'multiple'."
     )
     inventory_items: Optional[list[InventoryItem]] = Field(
         default=None,
         description="List of items visible in the inventory screen. Only set if update_type is 'inventory' or 'multiple' and an inventory/equipment screen is clearly visible."
     )
+    pictos: Optional[list[Picto]] = Field(
+        default=None,
+        description="List of Pictos (equipable perks) visible. Only set if viewing Picto menu."
+    )
     game_event: Optional[GameEvent] = Field(
         default=None,
-        description="Major game event if visible (death screen, boss defeated, grace discovered). Set when update_type is 'game_event' or 'multiple'."
+        description="Major game event if visible (death screen, boss defeated, flag discovered). Set when update_type is 'game_event' or 'multiple'."
     )
     boss: Optional[BossState] = Field(
         default=None,
-        description="Boss encounter info if a boss health bar is visible. Set when update_type is 'boss_encounter' or 'multiple'."
+        description="Boss/enemy encounter info if a boss health bar is visible in combat. Set when update_type is 'boss_encounter' or 'multiple'."
     )
-    grace_name: Optional[str] = Field(
+    flag_name: Optional[str] = Field(
         default=None,
-        description="Name of Site of Grace if player is resting at one. Set when update_type is 'grace_rest' or 'multiple'."
+        description="Name of Expedition Flag if player is resting at one. Set when update_type is 'flag_rest' or 'multiple'."
     )
-    time_of_day: Optional[TimeOfDay] = Field(
+    at_camp: Optional[bool] = Field(
         default=None,
-        description="In-game time of day based on sky/lighting. Only set if clearly determinable from gameplay screenshot."
+        description="Whether the party is resting at camp. Set when update_type is 'camp_rest' or 'multiple'."
     )
-    player_stats: Optional[PlayerStats] = Field(
+    character_stats: Optional[list[CharacterStats]] = Field(
         default=None,
-        description="Player stats visible in HUD or menus (HP, runes, level)."
+        description="Stats for party members visible in HUD or menus."
+    )
+    party_stats: Optional[PartyStats] = Field(
+        default=None,
+        description="Party-wide stats like gradient gauge."
     )
     reasoning: str = Field(
         description="Brief explanation of what was detected in the screenshot and why this update type was chosen."
@@ -118,39 +142,55 @@ class GameState(BaseModel):
     """Current state of the game being tracked."""
     player_location: str = Field(
         default="Unknown",
-        description="Current area/region the player is in"
+        description="Current area/region the party is in"
     )
     inventory: list[InventoryItem] = Field(
         default_factory=list,
-        description="Items in the player's inventory"
+        description="Items in the party's inventory"
+    )
+    pictos: list[Picto] = Field(
+        default_factory=list,
+        description="Pictos collected by the party"
     )
     current_boss: Optional[BossState] = Field(
         default=None,
         description="Current boss being fought, if any"
     )
-    last_grace: Optional[str] = Field(
+    last_flag: Optional[str] = Field(
         default=None,
-        description="Last Site of Grace the player rested at"
+        description="Last Expedition Flag the party rested at"
     )
-    time_of_day: TimeOfDay = Field(
-        default=TimeOfDay.UNKNOWN,
-        description="Current in-game time of day"
+    at_camp: bool = Field(
+        default=False,
+        description="Whether the party is currently at camp"
     )
-    deaths: int = Field(
+    party_defeats: int = Field(
         default=0,
-        description="Total number of deaths tracked"
+        description="Total number of party defeats tracked"
     )
     bosses_defeated: list[str] = Field(
         default_factory=list,
         description="List of boss names that have been defeated"
     )
-    graces_discovered: list[str] = Field(
+    axons_defeated: list[str] = Field(
         default_factory=list,
-        description="List of Sites of Grace discovered"
+        description="List of Axon names that have been defeated"
     )
-    player_stats: PlayerStats = Field(
-        default_factory=PlayerStats,
-        description="Latest known player stats"
+    flags_discovered: list[str] = Field(
+        default_factory=list,
+        description="List of Expedition Flags discovered"
+    )
+    active_party: list[str] = Field(
+        default_factory=lambda: ["Gustave", "Maelle", "Lune"],
+        description="Current active party members"
+    )
+    character_stats: dict[str, CharacterStats] = Field(
+        default_factory=dict,
+        description="Stats for each party member"
+    )
+    gradient_gauge: float = Field(
+        default=0.0,
+        description="Current gradient gauge percentage"
     )
     
     def apply_update(self, update: StateUpdate) -> bool:
@@ -171,6 +211,9 @@ class GameState(BaseModel):
             if update.inventory_items is not None:
                 self.inventory = update.inventory_items
                 changed = True
+            if update.pictos is not None:
+                self.pictos = update.pictos
+                changed = True
         
         # Boss encounter updates
         if update.update_type in (UpdateType.BOSS_ENCOUNTER, UpdateType.MULTIPLE):
@@ -181,47 +224,51 @@ class GameState(BaseModel):
         # Game event updates
         if update.update_type in (UpdateType.GAME_EVENT, UpdateType.MULTIPLE):
             if update.game_event is not None and update.game_event != GameEvent.NONE:
-                if update.game_event == GameEvent.PLAYER_DIED:
-                    self.deaths += 1
-                    self.current_boss = None  # Clear boss state on death
+                if update.game_event == GameEvent.PARTY_DEFEATED:
+                    self.party_defeats += 1
+                    self.current_boss = None  # Clear boss state on defeat
                     changed = True
                 elif update.game_event == GameEvent.BOSS_DEFEATED:
                     if self.current_boss is not None:
                         if self.current_boss.name not in self.bosses_defeated:
                             self.bosses_defeated.append(self.current_boss.name)
+                        if self.current_boss.is_axon and self.current_boss.name not in self.axons_defeated:
+                            self.axons_defeated.append(self.current_boss.name)
                         self.current_boss = None
                     changed = True
-                elif update.game_event == GameEvent.GRACE_DISCOVERED:
-                    if update.grace_name and update.grace_name not in self.graces_discovered:
-                        self.graces_discovered.append(update.grace_name)
+                elif update.game_event == GameEvent.FLAG_DISCOVERED:
+                    if update.flag_name and update.flag_name not in self.flags_discovered:
+                        self.flags_discovered.append(update.flag_name)
                     changed = True
         
-        # Grace rest updates
-        if update.update_type in (UpdateType.GRACE_REST, UpdateType.MULTIPLE):
-            if update.grace_name:
-                self.last_grace = update.grace_name
-                if update.grace_name not in self.graces_discovered:
-                    self.graces_discovered.append(update.grace_name)
+        # Flag rest updates
+        if update.update_type in (UpdateType.FLAG_REST, UpdateType.MULTIPLE):
+            if update.flag_name:
+                self.last_flag = update.flag_name
+                if update.flag_name not in self.flags_discovered:
+                    self.flags_discovered.append(update.flag_name)
                 self.current_boss = None  # Clear boss state when resting
+                self.at_camp = False
+                changed = True
+        
+        # Camp rest updates
+        if update.update_type in (UpdateType.CAMP_REST, UpdateType.MULTIPLE):
+            if update.at_camp is not None:
+                self.at_camp = update.at_camp
+                self.current_boss = None  # Clear boss state when at camp
                 changed = True
         
         # Stats updates
         if update.update_type in (UpdateType.STATS, UpdateType.MULTIPLE):
-            if update.player_stats is not None:
-                # Update only non-None fields
-                if update.player_stats.hp_percentage is not None:
-                    self.player_stats.hp_percentage = update.player_stats.hp_percentage
-                if update.player_stats.runes is not None:
-                    self.player_stats.runes = update.player_stats.runes
-                if update.player_stats.rune_level is not None:
-                    self.player_stats.rune_level = update.player_stats.rune_level
+            if update.character_stats is not None:
+                for char_stat in update.character_stats:
+                    self.character_stats[char_stat.name] = char_stat
                 changed = True
-        
-        # Time of day (always update if provided, regardless of update_type)
-        if update.time_of_day is not None and update.time_of_day != TimeOfDay.UNKNOWN:
-            if update.time_of_day != self.time_of_day:
-                self.time_of_day = update.time_of_day
+            if update.party_stats is not None:
+                if update.party_stats.active_characters:
+                    self.active_party = update.party_stats.active_characters
+                if update.party_stats.gradient_gauge is not None:
+                    self.gradient_gauge = update.party_stats.gradient_gauge
                 changed = True
         
         return changed
-
