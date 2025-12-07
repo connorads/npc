@@ -1,9 +1,8 @@
 """Semantic caching for LLM responses using LangCache."""
 
 import os
-import logging
 
-logger = logging.getLogger(__name__)
+import logfire
 
 
 class SemanticCache:
@@ -33,7 +32,7 @@ class SemanticCache:
         self._enabled = False
 
         if not all([self._server_url, self._cache_id, self._api_key]):
-            logger.warning(
+            logfire.warn(
                 "LangCache not configured. Set LANGCACHE_SERVER_URL, LANGCACHE_CACHE_ID, "
                 "and LANGCACHE_API_KEY env vars to enable semantic caching."
             )
@@ -48,19 +47,18 @@ class SemanticCache:
                 api_key=self._api_key,
             )
             self._enabled = True
-            logger.info("Semantic cache enabled with LangCache")
+            logfire.info("Semantic cache enabled with LangCache")
         except ImportError:
-            logger.warning(
-                "langcache package not installed. Semantic caching disabled."
-            )
+            logfire.warn("langcache package not installed. Semantic caching disabled.")
         except Exception as e:
-            logger.warning(f"Failed to initialize LangCache: {e}")
+            logfire.warn("Failed to initialize LangCache", error=str(e))
 
     @property
     def enabled(self) -> bool:
         """Check if semantic caching is enabled."""
         return self._enabled
 
+    @logfire.instrument("langcache.search")
     def search(self, prompt: str) -> str | None:
         """
         Search for a cached response.
@@ -78,16 +76,24 @@ class SemanticCache:
             result = self._client.search(prompt=prompt)
             if result and result.get("score", 0) >= self._similarity_threshold:
                 cached_response = result.get("response")
-                logger.debug(
-                    f"Cache hit (score={result.get('score', 0):.3f}): {prompt[:50]}..."
+                logfire.info(
+                    "Cache hit",
+                    prompt_length=len(prompt),
+                    similarity_score=result.get("score", 0),
+                    cache_hit=True,
                 )
                 return cached_response
-            logger.debug(f"Cache miss: {prompt[:50]}...")
+            logfire.debug(
+                "Cache miss",
+                prompt_length=len(prompt),
+                cache_hit=False,
+            )
             return None
         except Exception as e:
-            logger.warning(f"Cache search failed: {e}")
+            logfire.warn("Cache search failed", error=str(e))
             return None
 
+    @logfire.instrument("langcache.store")
     def store(self, prompt: str, response: str) -> bool:
         """
         Store a response in the cache.
@@ -104,10 +110,14 @@ class SemanticCache:
 
         try:
             self._client.set(prompt=prompt, response=response)
-            logger.debug(f"Cached response for: {prompt[:50]}...")
+            logfire.debug(
+                "Cached response",
+                prompt_length=len(prompt),
+                response_length=len(response),
+            )
             return True
         except Exception as e:
-            logger.warning(f"Cache store failed: {e}")
+            logfire.warn("Cache store failed", error=str(e))
             return False
 
     def __enter__(self):

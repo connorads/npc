@@ -3,6 +3,7 @@
 import os
 import io
 
+import logfire
 from elevenlabs import ElevenLabs
 
 
@@ -25,6 +26,7 @@ class SpeechToText:
         self._client = ElevenLabs(api_key=self._api_key)
         self._model_id = model_id
 
+    @logfire.instrument("elevenlabs.stt")
     def transcribe(self, audio_bytes: bytes) -> str:
         """
         Transcribe audio to text.
@@ -38,6 +40,12 @@ class SpeechToText:
         if not audio_bytes:
             return ""
 
+        logfire.info(
+            "Starting transcription",
+            audio_size_bytes=len(audio_bytes),
+            model_id=self._model_id,
+        )
+
         # Create a file-like object from bytes
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = "audio.wav"  # ElevenLabs needs a filename
@@ -45,6 +53,11 @@ class SpeechToText:
         result = self._client.speech_to_text.convert(
             file=audio_file,
             model_id=self._model_id,
+        )
+
+        logfire.info(
+            "Transcription completed",
+            transcript_length=len(result.text),
         )
 
         return result.text

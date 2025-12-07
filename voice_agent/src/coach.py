@@ -1,15 +1,13 @@
 """Gaming Coach LLM using OpenAI with semantic caching."""
 
 import base64
-import logging
 import os
 
+import logfire
 from openai import OpenAI
 
 from .context import ContextProvider
 from .semantic_cache import SemanticCache
-
-logger = logging.getLogger(__name__)
 
 
 DEFAULT_SYSTEM_PROMPT = """<role_and_objective>
@@ -132,6 +130,7 @@ class Coach:
             ContextProvider(openai_client=self._client) if enable_context else None
         )
 
+    @logfire.instrument("Coach.get_response")
     def get_response(
         self,
         user_message: str,
@@ -154,7 +153,11 @@ class Coach:
         if not screenshot and self._cache and self._cache.enabled:
             cached_response = self._cache.search(user_message)
             if cached_response:
-                logger.info(f"Cache hit for: {user_message[:50]}...")
+                logfire.info(
+                    "Cache hit for query",
+                    query_preview=user_message[:50],
+                    cache_hit=True,
+                )
                 # Add to history so conversation context stays consistent
                 self._history.append({"role": "user", "content": user_message})
                 self._history.append({"role": "assistant", "content": cached_response})
@@ -165,9 +168,10 @@ class Coach:
         # Fetch context from Redis (game state + NPC search)
         context_str = None
         if self._context:
-            context_str = self._context.get_context_for_query(user_message)
+            with logfire.span("fetch_redis_context"):
+                context_str = self._context.get_context_for_query(user_message)
             if context_str:
-                logger.info("Fetched context from Redis for query")
+                logfire.info("Fetched context from Redis", has_context=True)
 
         # Build the user message content
         if screenshot:
@@ -180,6 +184,11 @@ class Coach:
                     "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"},
                 },
             ]
+            logfire.info(
+                "Processing vision request",
+                has_screenshot=True,
+                screenshot_size_bytes=len(screenshot),
+            )
         else:
             content = user_message
 
@@ -213,7 +222,7 @@ class Coach:
         # Add conversation history
         messages.extend(self._history)
 
-        # Get response from OpenAI
+        # Get response from OpenAI (auto-instrumented by logfire.instrument_openai())
         response = self._client.chat.completions.create(
             model=self._model,
             messages=messages,
@@ -228,6 +237,13 @@ class Coach:
         # Store in cache for future queries (only text-only queries)
         if not screenshot and self._cache and self._cache.enabled:
             self._cache.store(user_message, assistant_message)
+
+        logfire.info(
+            "Coach response generated",
+            response_length=len(assistant_message),
+            history_length=len(self._history),
+            has_context=context_str is not None,
+        )
 
         return assistant_message
 

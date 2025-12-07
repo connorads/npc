@@ -2,6 +2,7 @@
 
 import os
 
+import logfire
 from elevenlabs import ElevenLabs
 from elevenlabs.types import VoiceSettings
 
@@ -35,6 +36,7 @@ class TextToSpeech:
         self._model_id = model_id
         self._speed = speed
 
+    @logfire.instrument("elevenlabs.tts")
     def synthesize(self, text: str) -> bytes:
         """
         Convert text to speech.
@@ -47,6 +49,13 @@ class TextToSpeech:
         """
         if not text:
             return b""
+
+        logfire.info(
+            "Starting speech synthesis",
+            text_length=len(text),
+            voice_id=self._voice_id,
+            model_id=self._model_id,
+        )
 
         # Generate audio - returns a generator
         audio_generator = self._client.text_to_speech.convert(
@@ -63,4 +72,11 @@ class TextToSpeech:
             if isinstance(chunk, bytes):
                 audio_chunks.append(chunk)
 
-        return b"".join(audio_chunks)
+        audio_bytes = b"".join(audio_chunks)
+
+        logfire.info(
+            "Speech synthesis completed",
+            audio_size_bytes=len(audio_bytes),
+        )
+
+        return audio_bytes

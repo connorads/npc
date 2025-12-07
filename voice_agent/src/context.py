@@ -1,8 +1,8 @@
 """Context provider for enriching LLM queries with game state and NPC data."""
 
-import logging
 import os
 
+import logfire
 import numpy as np
 import redis
 from openai import OpenAI
@@ -10,8 +10,6 @@ from redis.commands.search.query import Query
 
 from game_state_agent.models import GameState
 from game_state_agent.redis_store import GameStateStore
-
-logger = logging.getLogger(__name__)
 
 # Redis and embedding configuration
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
@@ -45,6 +43,7 @@ class ContextProvider:
         )
         self._game_store = GameStateStore(client=self._redis)
 
+    @logfire.instrument("get_game_state")
     def get_game_state(self) -> GameState | None:
         """Fetch the current game state from Redis.
 
@@ -54,9 +53,10 @@ class ContextProvider:
         try:
             return self._game_store.load()
         except Exception as e:
-            logger.warning(f"Failed to load game state from Redis: {e}")
+            logfire.warn("Failed to load game state from Redis", error=str(e))
             return None
 
+    @logfire.instrument("get_embedding")
     def _get_embedding(self, text: str) -> list[float]:
         """Get embedding for text using OpenAI API."""
         response = self._openai.embeddings.create(
@@ -65,6 +65,7 @@ class ContextProvider:
         )
         return response.data[0].embedding
 
+    @logfire.instrument("search_npcs")
     def search_npcs(self, query: str, top_k: int = 3) -> list[dict]:
         """Search for NPCs relevant to the query using semantic search.
 
@@ -114,10 +115,16 @@ class ContextProvider:
                         }
                     )
 
+            logfire.info(
+                "NPC search completed",
+                query_length=len(query),
+                top_k=top_k,
+                results_count=len(npcs),
+            )
             return npcs
 
         except Exception as e:
-            logger.warning(f"Failed to search NPCs: {e}")
+            logfire.warn("Failed to search NPCs", error=str(e))
             return []
 
     def format_context(

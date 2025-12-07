@@ -3,6 +3,7 @@
 import sys
 import os
 
+import logfire
 from dotenv import find_dotenv, load_dotenv
 
 from voice_agent.src.ptt import PTTHandler
@@ -44,6 +45,7 @@ class GamingCoach:
         # Start recording audio
         self._recorder.start()
 
+    @logfire.instrument("voice_interaction")
     def _on_ptt_release(self) -> None:
         """Called when PTT key is released."""
         print("[Processing...]", flush=True)
@@ -52,6 +54,7 @@ class GamingCoach:
         audio_bytes = self._recorder.stop()
 
         if not audio_bytes:
+            logfire.info("No audio recorded")
             print("No audio recorded.")
             return
 
@@ -62,6 +65,7 @@ class GamingCoach:
             print(f'"{transcript}"')
 
             if not transcript.strip():
+                logfire.info("No speech detected in audio")
                 print("  No speech detected.")
                 return
 
@@ -76,15 +80,18 @@ class GamingCoach:
             # Synthesize and play response
             print("  Speaking...", flush=True)
             audio_response = self._tts.synthesize(response)
-            self._player.play(audio_response)
+            with logfire.span("play_audio", audio_size_bytes=len(audio_response)):
+                self._player.play(audio_response)
 
         except Exception as e:
+            logfire.exception("Voice interaction failed")
             print(f"\n  Error: {e}")
             # Try to speak a fallback message
             try:
                 fallback = self._tts.synthesize("Sorry, I couldn't process that.")
                 self._player.play(fallback)
             except Exception:
+                logfire.error("Failed to speak fallback message")
                 print("  (Failed to speak fallback message)")
 
         finally:
@@ -124,6 +131,11 @@ def main():
     # Load environment variables from root .env
     load_dotenv(find_dotenv())
 
+    # Configure Logfire observability
+    logfire.configure(service_name="voice-agent")
+    logfire.instrument_openai()
+    logfire.instrument_redis()
+
     # Check for required env vars
     missing = []
     if not os.environ.get("OPENAI_API_KEY"):
@@ -146,6 +158,7 @@ def main():
         print("\n\nInterrupted. Goodbye!")
         sys.exit(0)
     except Exception as e:
+        logfire.exception("Fatal error in voice agent")
         print(f"\nFatal error: {e}")
         sys.exit(1)
 

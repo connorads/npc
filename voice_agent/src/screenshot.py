@@ -3,6 +3,7 @@
 import base64
 import io
 
+import logfire
 import mss
 from PIL import Image
 
@@ -21,6 +22,7 @@ class ScreenCapture:
         self._scale = scale
         self._quality = quality
 
+    @logfire.instrument("screenshot.capture")
     def capture(self) -> bytes:
         """
         Capture screen and return as JPEG bytes.
@@ -50,7 +52,16 @@ class ScreenCapture:
             buffer = io.BytesIO()
             img.save(buffer, format="JPEG", quality=self._quality)
             buffer.seek(0)
-            return buffer.read()
+            jpeg_bytes = buffer.read()
+
+            logfire.info(
+                "Screenshot captured",
+                image_size_bytes=len(jpeg_bytes),
+                scale=self._scale,
+                quality=self._quality,
+            )
+
+            return jpeg_bytes
 
     def capture_base64(self) -> str:
         """
