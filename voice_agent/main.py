@@ -28,11 +28,7 @@ class GamingCoach:
         self._stt = SpeechToText()
         self._tts = TextToSpeech()
         self._coach = Coach()
-<<<<<<< HEAD
-        self._overlay = TextOverlay()
         self._game_store = GameStateStore()
-=======
->>>>>>> b9ba633277479d379276349f9b92212e63ec6ebd
 
         # State
         self._screenshot: bytes | None = None
