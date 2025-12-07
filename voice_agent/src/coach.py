@@ -1,9 +1,14 @@
-"""Gaming Coach LLM using OpenAI."""
+"""Gaming Coach LLM using OpenAI with semantic caching."""
 
 import os
 import base64
+import logging
 
 from openai import OpenAI
+
+from .semantic_cache import SemanticCache
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_SYSTEM_PROMPT = """You are a friendly and knowledgeable gaming coach specializing in Clair Obscur: Expedition 33, the critically acclaimed turn-based RPG set in a dark fantasy Belle Époque world.
@@ -26,6 +31,7 @@ class Coach:
         model: str = "gpt-4.1",
         system_prompt: str | None = None,
         max_history: int = 20,
+        enable_cache: bool = True,
     ):
         """
         Initialize the coach.
@@ -35,6 +41,7 @@ class Coach:
             model: Model to use (gpt-4.1, gpt-4o, etc.)
             system_prompt: Custom system prompt for the coach.
             max_history: Maximum number of messages to keep in history.
+            enable_cache: Whether to enable semantic caching.
         """
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self._api_key:
@@ -46,6 +53,7 @@ class Coach:
         self._system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
         self._max_history = max_history
         self._history: list[dict] = []
+        self._cache = SemanticCache() if enable_cache else None
 
     def get_response(
         self,
@@ -64,6 +72,18 @@ class Coach:
         """
         if not user_message.strip():
             return "I didn't catch that. Could you repeat your question?"
+
+        # Try semantic cache first (only for text-only queries without screenshots)
+        if not screenshot and self._cache and self._cache.enabled:
+            cached_response = self._cache.search(user_message)
+            if cached_response:
+                logger.info(f"Cache hit for: {user_message[:50]}...")
+                # Add to history so conversation context stays consistent
+                self._history.append({"role": "user", "content": user_message})
+                self._history.append({"role": "assistant", "content": cached_response})
+                if len(self._history) > self._max_history:
+                    self._history = self._history[-self._max_history :]
+                return cached_response
 
         # Build the user message content
         if screenshot:
@@ -103,6 +123,10 @@ class Coach:
 
         # Add assistant response to history
         self._history.append({"role": "assistant", "content": assistant_message})
+
+        # Store in cache for future queries (only text-only queries)
+        if not screenshot and self._cache and self._cache.enabled:
+            self._cache.store(user_message, assistant_message)
 
         return assistant_message
 

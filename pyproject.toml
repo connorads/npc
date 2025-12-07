@@ -19,6 +19,7 @@ dependencies = [
     "elevenlabs>=1.0.0",
     "redis>=7.1.0",
     "sentence-transformers>=5.1.2",
+    "langcache>=0.1.0",
 ]
 
 [project.scripts]
