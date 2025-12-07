@@ -98,7 +98,7 @@ class Coach:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "gpt-5-mini-2025-08-07",
+        model: str = "gpt-5.1-2025-11-13",
         system_prompt: str | None = None,
         max_history: int = 20,
         enable_cache: bool = True,
@@ -109,7 +109,7 @@ class Coach:
 
         Args:
             api_key: OpenAI API key. Falls back to OPENAI_API_KEY env var.
-            model: Model to use (gpt-5-mini-2025-08-07, gpt-4o, etc.)
+            model: Model to use (gpt-5.1-2025-11-13, gpt-4o, etc.)
             system_prompt: Custom system prompt for the coach.
             max_history: Maximum number of messages to keep in history.
             enable_cache: Whether to enable semantic caching.

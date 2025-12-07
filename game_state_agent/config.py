@@ -9,7 +9,7 @@ load_dotenv(find_dotenv())
 
 # OpenAI configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL_NAME = "gpt-5-mini-2025-08-07"
+MODEL_NAME = "gpt-5.1-2025-11-13"
 
 # Screenshot interval in seconds
 CAPTURE_INTERVAL = 5
