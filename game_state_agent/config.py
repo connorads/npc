@@ -14,6 +14,12 @@ MODEL_NAME = "gpt-5.1-2025-11-13"
 # Screenshot interval in seconds
 CAPTURE_INTERVAL = 5
 
+# Redis configuration (loaded from .env via existing load_dotenv call)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+GAME_STATE_KEY = "game:state:latest"
+
 
 def get_openai_client() -> OpenAI:
     """Get configured OpenAI client."""

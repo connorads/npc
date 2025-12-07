@@ -8,6 +8,7 @@ from .analyzer import ScreenshotAnalyzer
 from .capture import ScreenCapture
 from .config import CAPTURE_INTERVAL
 from .logging_config import setup_logging
+from .redis_store import GameStateStore
 from .state_manager import StateManager
 
 logger = logging.getLogger(__name__)
@@ -15,15 +16,16 @@ logger = logging.getLogger(__name__)
 
 class GameStateAgent:
     """Main agent that coordinates screenshot capture and analysis."""
-    
+
     def __init__(self, capture_interval: float = CAPTURE_INTERVAL):
         """Initialize the game state agent.
-        
+
         Args:
             capture_interval: Seconds between screenshot captures
         """
         self.capture_interval = capture_interval
-        self.state_manager = StateManager()
+        self.redis_store = GameStateStore()
+        self.state_manager = StateManager(redis_store=self.redis_store)
         self.analyzer = ScreenshotAnalyzer()
         self._running = False
     

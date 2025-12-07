@@ -1,28 +1,45 @@
 """Game state management."""
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from .logging_config import log_game_state
 from .models import GameState, StateUpdate, UpdateType
+
+if TYPE_CHECKING:
+    from .redis_store import GameStateStore
 
 logger = logging.getLogger(__name__)
 
 
 class StateManager:
     """Manages game state and coordinates updates."""
-    
-    def __init__(self, initial_state: GameState | None = None):
+
+    def __init__(
+        self,
+        initial_state: GameState | None = None,
+        redis_store: GameStateStore | None = None,
+    ):
         """Initialize state manager.
-        
+
         Args:
             initial_state: Starting game state. If None, creates default state.
+            redis_store: Optional Redis store for persistence. If provided,
+                state changes are automatically saved to Redis.
         """
         self.state = initial_state or GameState()
         self._listeners: list[Callable[[GameState, StateUpdate], None]] = []
         self._last_update: datetime | None = None
-        
+        self._redis_store = redis_store
+
+        # Register Redis persistence listener if store provided
+        if redis_store:
+            self.add_listener(lambda state, _: redis_store.save(state))
+            logger.info("Redis persistence enabled")
+
         # Log initial state
         logger.info("StateManager initialized")
         log_game_state(logger, self.state)
