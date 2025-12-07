@@ -1,4 +1,4 @@
-"""Context provider for enriching LLM queries with game state and knowledge data."""
+"""Context provider for enriching LLM queries with game state and NPC data."""
 
 import os
 
@@ -15,7 +15,7 @@ from game_state_agent.redis_store import GameStateStore
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-GAME_INDEX_NAME = "idx:game"
+NPC_INDEX_NAME = "idx:npcs"
 EMBEDDING_MODEL = "text-embedding-3-small"
 SIMILARITY_THRESHOLD = 0.3  # Minimum similarity score (1 - distance) to include results
 
@@ -65,16 +65,16 @@ class ContextProvider:
         )
         return response.data[0].embedding
 
-    @logfire.instrument("search_game_knowledge")
-    def search_game_knowledge(self, query: str, top_k: int = 3) -> list[dict]:
-        """Search for game knowledge relevant to the query using semantic search.
+    @logfire.instrument("search_npcs")
+    def search_npcs(self, query: str, top_k: int = 3) -> list[dict]:
+        """Search for NPCs relevant to the query using semantic search.
 
         Args:
             query: Natural language query to search for.
             top_k: Maximum number of results to return.
 
         Returns:
-            List of game knowledge dictionaries with relevant fields, filtered by similarity threshold.
+            List of NPC dictionaries with relevant fields, filtered by similarity threshold.
         """
         try:
             query_embedding = np.array(self._get_embedding(query), dtype=np.float32)
@@ -85,56 +85,58 @@ class ContextProvider:
                 .return_fields(
                     "score",
                     "name",
-                    "type",
-                    "area",
+                    "race",
+                    "role",
+                    "region",
                     "description",
-                    "tips",
+                    "how_to_beat_tips",
                 )
                 .dialect(2)
             )
 
-            results = self._redis.ft(GAME_INDEX_NAME).search(
+            results = self._redis.ft(NPC_INDEX_NAME).search(
                 search_query, {"query_vec": query_embedding.tobytes()}
             )
 
-            entries = []
+            npcs = []
             for doc in results.docs:
                 # Score is distance, so similarity = 1 - score
                 similarity = 1 - float(doc.score)
                 if similarity >= SIMILARITY_THRESHOLD:
-                    entries.append(
+                    npcs.append(
                         {
                             "name": doc.name,
-                            "type": doc.type,
-                            "area": doc.area,
+                            "race": doc.race,
+                            "role": doc.role,
+                            "region": doc.region,
                             "description": getattr(doc, "description", ""),
-                            "tips": getattr(doc, "tips", ""),
+                            "tips": getattr(doc, "how_to_beat_tips", ""),
                             "similarity": similarity,
                         }
                     )
 
             logfire.info(
-                "Game knowledge search completed",
+                "NPC search completed",
                 query_length=len(query),
                 top_k=top_k,
-                results_count=len(entries),
+                results_count=len(npcs),
             )
-            return entries
+            return npcs
 
         except Exception as e:
-            logfire.warn("Failed to search game knowledge", error=str(e))
+            logfire.warn("Failed to search NPCs", error=str(e))
             return []
 
     def format_context(
         self,
         game_state: GameState | None,
-        knowledge_results: list[dict],
+        npc_results: list[dict],
     ) -> str | None:
-        """Format game state and knowledge results into a context string for the LLM.
+        """Format game state and NPC results into a context string for the LLM.
 
         Args:
             game_state: Current game state from Redis.
-            knowledge_results: List of relevant game knowledge from semantic search.
+            npc_results: List of relevant NPCs from semantic search.
 
         Returns:
             Formatted context string, or None if no context is available.
@@ -172,26 +174,26 @@ class ContextProvider:
             state_lines.append("</game_state>")
             parts.append("\n".join(state_lines))
 
-        # Format game knowledge results
-        if knowledge_results:
-            knowledge_lines = ["<game_knowledge>"]
-            for i, entry in enumerate(knowledge_results, 1):
-                knowledge_lines.append(
-                    f"{i}. {entry['name']} ({entry['type']}) - {entry['area']}"
+        # Format NPC results
+        if npc_results:
+            npc_lines = ["<relevant_npcs>"]
+            for i, npc in enumerate(npc_results, 1):
+                npc_lines.append(
+                    f"{i}. {npc['name']} ({npc['role']}) - {npc['region']}"
                 )
-                if entry["description"]:
+                if npc["description"]:
                     # Truncate long descriptions
-                    desc = entry["description"]
+                    desc = npc["description"]
                     if len(desc) > 200:
                         desc = desc[:200] + "..."
-                    knowledge_lines.append(f"   {desc}")
-                if entry["tips"]:
-                    tips = entry["tips"]
+                    npc_lines.append(f"   {desc}")
+                if npc["tips"]:
+                    tips = npc["tips"]
                     if len(tips) > 200:
                         tips = tips[:200] + "..."
-                    knowledge_lines.append(f"   Tips: {tips}")
-            knowledge_lines.append("</game_knowledge>")
-            parts.append("\n".join(knowledge_lines))
+                    npc_lines.append(f"   Tips: {tips}")
+            npc_lines.append("</relevant_npcs>")
+            parts.append("\n".join(npc_lines))
 
         if not parts:
             return None
@@ -201,16 +203,16 @@ class ContextProvider:
     def get_context_for_query(self, query: str, top_k: int = 3) -> str | None:
         """Get formatted context for a user query.
 
-        This is a convenience method that fetches game state and searches game knowledge,
+        This is a convenience method that fetches game state and searches NPCs,
         then formats everything into a single context string.
 
         Args:
             query: The user's question.
-            top_k: Maximum number of knowledge results.
+            top_k: Maximum number of NPC results.
 
         Returns:
             Formatted context string, or None if no context is available.
         """
         game_state = self.get_game_state()
-        knowledge_results = self.search_game_knowledge(query, top_k=top_k)
-        return self.format_context(game_state, knowledge_results)
+        npc_results = self.search_npcs(query, top_k=top_k)
+        return self.format_context(game_state, npc_results)

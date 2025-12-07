@@ -1,11 +1,10 @@
 """
-Game Knowledge Vector Database Setup
-Loads game knowledge data into Redis with vector embeddings for semantic search.
+Elden Ring NPC Vector Database Setup
+Loads NPC data into Redis with vector embeddings for semantic search.
 """
 
 import json
 import os
-import re
 
 import numpy as np
 import redis
@@ -19,52 +18,28 @@ load_dotenv()
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-INDEX_NAME = "idx:game"
-KEY_PREFIX = "game:"
+INDEX_NAME = "idx:npcs"
+NPC_PREFIX = "npc:"
 VECTOR_DIM = 1536  # OpenAI text-embedding-3-small output dimension
 EMBEDDING_MODEL = "text-embedding-3-small"
 
-
-def slugify(text: str) -> str:
-    """Convert text to a URL-friendly slug for use as an ID."""
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9\s-]", "", text)
-    text = re.sub(r"[\s_]+", "-", text)
-    text = re.sub(r"-+", "-", text)
-    return text.strip("-")
-
-
-def create_embedding_text(entry: dict) -> str:
-    """Combine relevant fields for rich semantic search embeddings."""
-    parts = [
-        entry.get("name", ""),
-        entry.get("type", ""),
-        entry.get("area", ""),
-        entry.get("description", ""),
-        entry.get("tips", ""),
-        entry.get("location", ""),
-        entry.get("rewards", ""),
-        entry.get("requirements", ""),
-    ]
-    return " ".join(p for p in parts if p)
-
-
 # --- Connect to Redis ---
+# Note: decode_responses=False for binary vector data
 client = redis.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT,
     password=REDIS_PASSWORD,
-    decode_responses=False,
+    decode_responses=False
 )
 
 print("Connected to Redis")
 
-# --- Load Game Knowledge Data ---
+# --- Load NPC Data ---
 project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-with open(os.path.join(project_dir, "data/game_knowledge.json"), "r") as f:
-    entries = json.load(f)
+with open(os.path.join(project_dir, "data/npcs.json"), "r") as f:
+    npcs = json.load(f)
 
-print(f"Loaded {len(entries)} entries")
+print(f"Loaded {len(npcs)} NPCs")
 
 # --- Initialize OpenAI Client ---
 openai_client = OpenAI()
@@ -78,40 +53,54 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     )
     return [item.embedding for item in response.data]
 
-
 # --- Create Embeddings ---
+# Combine description + lore + dialogue + tips for richer embeddings
+def create_embedding_text(npc):
+    parts = [
+        npc.get("description", ""),
+        npc.get("lore", ""),
+        npc.get("dialogue", ""),
+        npc.get("how_to_beat_tips", "")
+    ]
+    return " ".join(parts)
+
 print("Generating embeddings via OpenAI API...")
-embedding_texts = [create_embedding_text(entry) for entry in entries]
+embedding_texts = [create_embedding_text(npc) for npc in npcs]
 embeddings = np.array(get_embeddings(embedding_texts), dtype=np.float32)
 
-# --- Store Entries in Redis ---
-print("Storing entries in Redis...")
+# --- Store NPCs in Redis ---
+print("Storing NPCs in Redis...")
 pipeline = client.pipeline()
 
-for entry, embedding in zip(entries, embeddings):
-    # Generate ID if not present
-    entry_id = entry.get("id") or slugify(entry["name"])
-    key = f"{KEY_PREFIX}{entry_id}"
+for npc, embedding in zip(npcs, embeddings):
+    key = f"{NPC_PREFIX}{npc['id']}"
 
+    # Prepare document - convert lists to comma-separated strings for TAG fields
     doc = {
-        "id": entry_id,
-        "name": entry.get("name", ""),
-        "type": entry.get("type", ""),
-        "area": entry.get("area", ""),
-        "location": entry.get("location", ""),
-        "description": entry.get("description", ""),
-        "tips": entry.get("tips", ""),
-        "rewards": entry.get("rewards", ""),
-        "weakness": entry.get("weakness", ""),
-        "resistance": entry.get("resistance", ""),
-        "requirements": entry.get("requirements", ""),
-        "embedding": embedding.tobytes(),
+        "id": npc["id"],
+        "name": npc["name"],
+        "race": npc["race"],
+        "role": npc["role"],
+        "locations": ",".join(npc["locations"]),
+        "region": npc["region"],
+        "affiliation": npc["affiliation"],
+        "quest": npc["quest"],
+        "is_hostile": str(npc["is_hostile"]).lower(),
+        "becomes_hostile": str(npc["becomes_hostile"]).lower(),
+        "drops": ",".join(npc["drops"]) if npc["drops"] else "",
+        "description": npc["description"],
+        "lore": npc["lore"],
+        "dialogue": npc.get("dialogue", ""),
+        "weakness": npc.get("weakness", ""),
+        "resistance": npc.get("resistance", ""),
+        "how_to_beat_tips": npc.get("how_to_beat_tips", ""),
+        "embedding": embedding.tobytes()  # Store as raw bytes
     }
 
     pipeline.hset(key, mapping=doc)
 
 pipeline.execute()
-print(f"Stored {len(entries)} entries")
+print(f"Stored {len(npcs)} NPCs")
 
 # --- Create Search Index ---
 print("Creating search index...")
@@ -120,21 +109,25 @@ print("Creating search index...")
 try:
     client.ft(INDEX_NAME).dropindex(delete_documents=False)
     print("Dropped existing index")
-except Exception:
+except:
     pass
 
 # Define schema
-schema = [
+schema = (
     TextField("name", weight=2.0),
-    TagField("type"),
-    TagField("area"),
-    TextField("location"),
     TextField("description"),
-    TextField("tips"),
-    TextField("rewards"),
+    TextField("lore"),
+    TextField("dialogue"),
+    TagField("race"),
+    TagField("role"),
+    TagField("region"),
+    TagField("affiliation"),
+    TagField("quest"),
+    TagField("is_hostile"),
+    TagField("becomes_hostile"),
     TextField("weakness"),
     TextField("resistance"),
-    TextField("requirements"),
+    TextField("how_to_beat_tips"),
     VectorField(
         "embedding",
         "FLAT",
@@ -144,16 +137,16 @@ schema = [
             "DISTANCE_METRIC": "COSINE",
         },
     ),
-]
+)
 
 # Create index
 client.ft(INDEX_NAME).create_index(
     schema,
-    definition=IndexDefinition(prefix=[KEY_PREFIX], index_type=IndexType.HASH),
+    definition=IndexDefinition(prefix=[NPC_PREFIX], index_type=IndexType.HASH),
 )
 
 print(f"Created index: {INDEX_NAME}")
 print("\n--- Setup Complete ---")
-print(f"Entries stored: {len(entries)}")
+print(f"NPCs stored: {len(npcs)}")
 print(f"Index: {INDEX_NAME}")
-print(f"Key prefix: {KEY_PREFIX}")
+print(f"Key prefix: {NPC_PREFIX}")

@@ -1,6 +1,6 @@
 # Tinkerers Hack - Gaming AI Agents
 
-Two AI agents for gaming: a voice coach and a game state tracker, plus Redis-based game knowledge.
+Two AI agents for gaming: a voice coach and a game state tracker, plus Redis-based NPC knowledge.
 
 ## Quick Start
 
@@ -57,7 +57,7 @@ Or run both in one terminal (game-state in background):
 uv run game-state & uv run voice-agent
 ```
 
-## Redis Game Knowledge Database
+## Redis NPC Database
 
 ### Prerequisites
 
@@ -80,49 +80,42 @@ uv run python redis_setup/setup_redis.py
 
 ```bash
 # Run example queries
-uv run python -i query_game.py
+uv run query-npcs
+
+# Interactive mode
+uv run python -i query_npcs.py
 ```
 
 ```python
-from query_game import semantic_search, filter_search, get_entry
+from query_npcs import semantic_search, filter_search, get_entry
 
 # Semantic search - natural language queries
 semantic_search("boss with shields and flowers")
 semantic_search("how to cross the sea")
 
 # Filter by metadata
-filter_search("@area:{Gestral Village}")
-filter_search("@type:{Merchant}")
-filter_search("@type:{Boss}")
+filter_search("@region:{The Continent}")
+filter_search("@role:{Merchant}")
+filter_search("@race:{Boss}")
 
 # Combined: semantic + filter
-semantic_search("secret items", filter_expr="@area:{Gestral Village}")
+semantic_search("secret items", filter_expr="@region:{The Continent}")
 
 # Get specific entry by ID
 get_entry("goblu")
 ```
 
-### Game Knowledge Schema
+### NPC Data Schema
 
-Entries in `data/game_knowledge.json` have:
-- `id`, `name`, `type`, `area`
-- `location`, `description`, `tips`
-- `rewards`, `weakness`, `resistance`, `requirements`
+NPCs in `data/npcs.json` have:
+- `name`, `race`, `role`, `region`
+- `locations`, `affiliation`, `quest`
+- `description`, `lore`, `dialogue`
+- `is_hostile`, `becomes_hostile`, `drops`
 
-### Adding Game Knowledge
+### Adding NPCs
 
-**Flat format**: Edit `data/game_knowledge.json` directly.
-
-**Zone format**: Use the transformer to convert nested zone data:
-```bash
-# Preview transformed data
-uv run python -m redis_setup.transform_zone zone_data.json
-
-# Append to game_knowledge.json
-uv run python -m redis_setup.transform_zone zone_data.json --append
-```
-
-Then re-run setup:
+Edit `data/npcs.json` and re-run:
 ```bash
 uv run python redis_setup/setup_redis.py
 ```
@@ -133,7 +126,7 @@ uv run python redis_setup/setup_redis.py
 - macOS (for Right Option key detection in voice agent)
 - OpenAI API key
 - ElevenLabs API key (for voice agent)
-- Redis (for game knowledge database)
+- Redis (for NPC database)
 
 ### macOS Permissions
 
@@ -196,11 +189,8 @@ voice_agent/          # Voice coach agent
     coach.py          # LLM coach
 
 redis_setup/          # Redis vector database setup
+  data/npcs.json      # NPC seed data
   setup_redis.py      # Populates Redis with embeddings
-  transform_zone.py   # Convert zone JSON to flat format
 
-data/
-  game_knowledge.json # Game knowledge seed data
-
-query_game.py         # Query utilities
+query_npcs.py         # Query utilities
 ```
