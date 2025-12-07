@@ -47,7 +47,7 @@ src/
 ├── screenshot.py    # Screen capture (mss + PIL)
 ├── stt.py           # Speech-to-text (ElevenLabs Scribe)
 ├── tts.py           # Text-to-speech (ElevenLabs)
-└── coach.py         # LLM coach (OpenAI gpt-4.1)
+└── coach.py         # LLM coach (OpenAI gpt-5.1-2025-11-13)
 ```
 
 ## Configuration
@@ -64,7 +64,7 @@ Environment variables (in `.env`):
 1. **Press Right Option** → Starts recording audio + captures screenshot
 2. **Release Right Option** → Stops recording and triggers pipeline:
    - Audio → ElevenLabs STT → transcript
-   - Transcript + screenshot → OpenAI GPT-4.1 → response
+   - Transcript + screenshot → OpenAI gpt-5.1-2025-11-13 → response
    - Response → ElevenLabs TTS → audio playback
 
 The screenshot is passed to the LLM for game-aware context (vision support).
@@ -75,5 +75,5 @@ The screenshot is passed to the LLM for game-aware context (vision support).
 - **Audio**: sounddevice + numpy
 - **Screenshot**: mss + Pillow  
 - **STT**: ElevenLabs Scribe
-- **LLM**: OpenAI GPT-4.1 (with vision)
+- **LLM**: OpenAI gpt-5.1-2025-11-13 (with vision)
 - **TTS**: ElevenLabs Turbo v2.5
