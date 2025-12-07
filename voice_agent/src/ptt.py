@@ -8,17 +8,20 @@ from pynput.keyboard import Key
 class PTTHandler:
     """Handles push-to-talk keyboard events using pynput."""
 
-    def __init__(self, key: Key = Key.alt_r):
+    def __init__(self, key: Key = Key.alt_r, reset_key: Key = Key.cmd_r):
         """
         Initialize the PTT handler.
 
         Args:
             key: The key to use for PTT. Default is Key.alt_r (right option on macOS).
+            reset_key: The key to use for reset. Default is Key.cmd_r (right command on macOS).
         """
         self._ptt_key = key
+        self._reset_key = reset_key
         self._on_press_callback: Callable[[], None] | None = None
         self._on_release_callback: Callable[[], None] | None = None
         self._on_quit_callback: Callable[[], None] | None = None
+        self._on_reset_callback: Callable[[], None] | None = None
         self._listener: keyboard.Listener | None = None
         self._is_pressed = False
 
@@ -34,12 +37,19 @@ class PTTHandler:
         """Register callback for quit (ESC) key."""
         self._on_quit_callback = callback
 
+    def on_reset(self, callback: Callable[[], None]) -> None:
+        """Register callback for reset key press."""
+        self._on_reset_callback = callback
+
     def _handle_press(self, key: Key | keyboard.KeyCode | None) -> None:
         """Internal handler for key press events."""
         if key == self._ptt_key and not self._is_pressed:
             self._is_pressed = True
             if self._on_press_callback:
                 self._on_press_callback()
+        elif key == self._reset_key:
+            if self._on_reset_callback:
+                self._on_reset_callback()
 
     def _handle_release(self, key: Key | keyboard.KeyCode | None) -> None:
         """Internal handler for key release events."""

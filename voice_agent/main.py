@@ -6,6 +6,7 @@ import os
 import logfire
 from dotenv import find_dotenv, load_dotenv
 
+from game_state_agent.redis_store import GameStateStore
 from voice_agent.src.ptt import PTTHandler
 from voice_agent.src.audio import AudioRecorder, AudioPlayer
 from voice_agent.src.screenshot import ScreenCapture
@@ -29,6 +30,7 @@ class GamingCoach:
         self._tts = TextToSpeech()
         self._coach = Coach()
         self._overlay = TextOverlay()
+        self._game_store = GameStateStore()
 
         # State
         self._screenshot: bytes | None = None
@@ -38,6 +40,7 @@ class GamingCoach:
         self._ptt.on_press(self._on_ptt_press)
         self._ptt.on_release(self._on_ptt_release)
         self._ptt.on_quit(self._on_quit)
+        self._ptt.on_reset(self._on_reset)
 
     def _on_ptt_press(self) -> None:
         """Called when PTT key is pressed."""
@@ -109,6 +112,12 @@ class GamingCoach:
         print("\n\nShutting down...")
         self._running = False
 
+    def _on_reset(self) -> None:
+        """Called when reset key (right CMD) is pressed."""
+        self._game_store.delete()
+        self._coach.clear_history()
+        print("\n[Reset] Game state and conversation cleared")
+
     def run(self) -> None:
         """Main loop - start listening and wait for quit."""
         self._running = True
@@ -119,6 +128,7 @@ class GamingCoach:
         print()
         print("  Hold RIGHT OPTION to talk")
         print("  Release to get a response")
+        print("  Press RIGHT CMD to reset state")
         print("  Press ESC to quit")
         print()
         print("=" * 50)
